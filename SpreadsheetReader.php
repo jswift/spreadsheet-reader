@@ -2,10 +2,10 @@
 /**
  * Main class for spreadsheet reading
  *
- * @version 0.5.6
+ * @version 0.5.10
  * @author Martins Pilsetnieks
  */
-	class SpreadsheetReader implements Iterator, Countable
+	class SpreadsheetReader implements SeekableIterator, Countable
 	{
 		const TYPE_XLSX = 'XLSX';
 		const TYPE_XLS = 'XLS';
@@ -49,6 +49,18 @@
 			if ($DefaultTZ)
 			{
 				date_default_timezone_set($DefaultTZ);
+			}
+
+			// Checking the other parameters for correctness
+
+			// This should be a check for string but we're lenient
+			if (!empty($OriginalFilename) && !is_scalar($OriginalFilename))
+			{
+				throw new Exception('SpreadsheetReader: Original file (2nd parameter) path is not a string or a scalar value.');
+			}
+			if (!empty($MimeType) && !is_scalar($MimeType))
+			{
+				throw new Exception('SpreadsheetReader: Mime type (3nd parameter) path is not a string or a scalar value.');
 			}
 
 			// 1. Determine type
@@ -204,7 +216,9 @@
 				throw new Exception('SpreadsheetReader: Invalid type ('.$Type.')');
 			}
 
-			if (!class_exists('SpreadsheetReader_'.$Type))
+			// 2nd parameter is to prevent autoloading for the class.
+			// If autoload works, the require line is unnecessary, if it doesn't, it ends badly.
+			if (!class_exists('SpreadsheetReader_'.$Type, false))
 			{
 				require(dirname(__FILE__).DIRECTORY_SEPARATOR.'SpreadsheetReader_'.$Type.'.php');
 			}
@@ -293,6 +307,42 @@
 				return $this -> Handle -> count();
 			}
 			return 0;
+		}
+
+		/**
+		 * Method for SeekableIterator interface. Takes a posiiton and traverses the file to that position
+		 * The value can be retrieved with a `current()` call afterwards.
+		 *
+		 * @param int Position in file
+		 */
+		public function seek($Position)
+		{
+			if (!$this -> Handle)
+			{
+				throw new OutOfBoundsException('SpreadsheetReader: No file opened');
+			}
+
+			$CurrentIndex = $this -> Handle -> key();
+
+			if ($CurrentIndex != $Position)
+			{
+				if ($Position < $CurrentIndex || is_null($CurrentIndex) || $Position == 0)
+				{
+					$this -> rewind();
+				}
+
+				while ($this -> Handle -> valid() && ($Position > $this -> Handle -> key()))
+				{
+					$this -> Handle -> next();
+				}
+
+				if (!$this -> Handle -> valid())
+				{
+					throw new OutOfBoundsException('SpreadsheetError: Position '.$Position.' not found');
+				}
+			}
+
+			return null;
 		}
 	}
 ?>
